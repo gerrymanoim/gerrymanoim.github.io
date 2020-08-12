@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://gerrymanoim.github.io/</loc>
+    </url>
+    <url>
+        <loc>https://gerrymanoim.github.io/about/</loc>
+    </url>
+    <url>
+        <loc>https://gerrymanoim.github.io/categories/</loc>
+    </url>
+    <url>
+        <loc>https://gerrymanoim.github.io/categories/useful-airflow-patterns/</loc>
+    </url>
+    <url>
+        <loc>https://gerrymanoim.github.io/recent-code/</loc>
+    </url>
+    <url>
+        <loc>https://gerrymanoim.github.io/writings/</loc>
+    </url>
+    <url>
+        <loc>https://gerrymanoim.github.io/writings/dag-environments/</loc>
+    </url>
+    <url>
+        <loc>https://gerrymanoim.github.io/writings/ftp-cloning-with-aws-lambda/</loc>
+    </url>
+    <url>
+        <loc>https://gerrymanoim.github.io/writings/notification-callbacks/</loc>
+    </url>
+    <url>
+        <loc>https://gerrymanoim.github.io/writings/timezone-aware-slas/</loc>
+    </url>
+</urlset>
