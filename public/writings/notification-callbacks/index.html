@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Web Things</title>
+  <link rel="stylesheet" href="/app.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id="banner">
+    <div id="logo">
+        <!-- TODO Logo or other picture-->
+        <a href="/" id="home-link">home</a>
+    </div>
+    <div id="top-menu">
+        <a href="http:&#x2F;&#x2F;127.0.0.1:1111&#x2F;about&#x2F;">about</a>
+        <a href="http://github.com/gerrymanoim/">github</a>
+    </div>
+    <div style="clear:both"></div>
+  </div>
+  <div id="main-column">
+    
+<div class="article-container">
+<article>
+  <h1 class="title">
+    Better Notifications via Better Callbacks - Part 1
+  </h1>
+  <p class="subtitle">
+    
+    Category:
+      
+          <a href="http://127.0.0.1:1111/categories/useful-airflow-patterns/">Useful Airflow Patterns</a>
+      
+    
+  <section><p>In Part 1 we will build a simple generic notification router for Airflow. In Part 2 we will then refactor our generic notification router to be more robust and safer.</p>
+<p>If you want to skip the discussion, the full code can be found <a href="https://gist.github.com/gerrymanoim/83b08008b2eefd2a20cb4fc38aa25544">on github</a>.</p>
+<h2 id="motivations-for-better-callbacks">Motivations for Better Callbacks</h2>
+<p>Traditionally in airflow one manages notifications for tasks via the <code>on_success_callback</code> and <code>on_failure_callback</code> which take a <code>Callable</code>. For example, you often see something like:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#b48ead;">from . import </span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+    slack_failure_callback,</span><span style="color:#c0c5ce;">
+    slack_retry_callback,</span><span style="color:#c0c5ce;">
+    slack_success_callback</span><span style="color:#c0c5ce;">
+ ) </span><span style="color:#65737e;"># as examples callback services you may already have</span><span style="color:#65737e;">
+</span><span style="color:#c0c5ce;">
+</span><span style="color:#b48ead;">with </span><span style="color:#bf616a;">DAG</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">dag_id</span><span style="color:#c0c5ce;">=&#39;</span><span style="color:#a3be8c;">my_dag</span><span style="color:#c0c5ce;">&#39;) </span><span style="color:#b48ead;">as </span><span style="color:#c0c5ce;">dag:</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    first_task = </span><span style="color:#bf616a;">DummyOperator</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">task_id</span><span style="color:#c0c5ce;">=&#39;</span><span style="color:#a3be8c;">first_task</span><span style="color:#c0c5ce;">&#39;,</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">on_success_callback</span><span style="color:#c0c5ce;">=slack_success_callback,</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">on_failure_callback</span><span style="color:#c0c5ce;">=slack_failure_callback,</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">on_retry_callback</span><span style="color:#c0c5ce;">=slack_retry_callback,</span><span style="color:#c0c5ce;">
+    )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    second_task = </span><span style="color:#bf616a;">DummyOperator</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">task_id</span><span style="color:#c0c5ce;">=&#39;</span><span style="color:#a3be8c;">second_task</span><span style="color:#c0c5ce;">&#39;,</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">on_success_callback</span><span style="color:#c0c5ce;">=slack_success_callback,</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">on_failure_callback</span><span style="color:#c0c5ce;">=slack_failure_callback,</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">on_retry_callback</span><span style="color:#c0c5ce;">=slack_retry_callback,</span><span style="color:#c0c5ce;">
+    )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    third_task = </span><span style="color:#bf616a;">DummyOperator</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">task_id</span><span style="color:#c0c5ce;">=&#39;</span><span style="color:#a3be8c;">third_task</span><span style="color:#c0c5ce;">&#39;,</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">on_success_callback</span><span style="color:#c0c5ce;">=slack_success_callback,</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">on_failure_callback</span><span style="color:#c0c5ce;">=slack_failure_callback,</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">on_retry_callback</span><span style="color:#c0c5ce;">=slack_retry_callback,</span><span style="color:#c0c5ce;">
+    )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    first_task &gt;&gt; second_task &gt;&gt; third_task</span><span style="color:#c0c5ce;">
+</span></code></pre>
+<p>This gets rather repetitive quickly. Luckily airflow provides a <code>default_args</code> mechanism on the <code>DAG</code> level, so we could instead do something like:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#b48ead;">from . import </span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+    slack_failure_callback,</span><span style="color:#c0c5ce;">
+    slack_retry_callback,</span><span style="color:#c0c5ce;">
+    slack_success_callback</span><span style="color:#c0c5ce;">
+) </span><span style="color:#65737e;"># as examples callback services you may alerady have</span><span style="color:#65737e;">
+</span><span style="color:#c0c5ce;">
+default_args = {</span><span style="color:#c0c5ce;">
+    &#39;</span><span style="color:#a3be8c;">on_failure_callback</span><span style="color:#c0c5ce;">&#39;: slack_failure_callback,</span><span style="color:#c0c5ce;">
+    &#39;</span><span style="color:#a3be8c;">on_retry_callback</span><span style="color:#c0c5ce;">&#39;: slack_retry_callback,</span><span style="color:#c0c5ce;">
+    &#39;</span><span style="color:#a3be8c;">on_success_callback</span><span style="color:#c0c5ce;">&#39;: slack_success_callback,</span><span style="color:#c0c5ce;">
+}</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+</span><span style="color:#b48ead;">with </span><span style="color:#bf616a;">DAG</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+    </span><span style="color:#bf616a;">dag_id</span><span style="color:#c0c5ce;">=&#39;</span><span style="color:#a3be8c;">my_dag</span><span style="color:#c0c5ce;">&#39;,</span><span style="color:#c0c5ce;">
+    </span><span style="color:#bf616a;">default_args</span><span style="color:#c0c5ce;">=default_args,</span><span style="color:#c0c5ce;">
+) </span><span style="color:#b48ead;">as </span><span style="color:#c0c5ce;">dag:</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    first_task = </span><span style="color:#bf616a;">DummyOperator</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">task_id</span><span style="color:#c0c5ce;">=&#39;</span><span style="color:#a3be8c;">first_task</span><span style="color:#c0c5ce;">&#39;,</span><span style="color:#c0c5ce;">
+    )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    second_task = </span><span style="color:#bf616a;">DummyOperator</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">task_id</span><span style="color:#c0c5ce;">=&#39;</span><span style="color:#a3be8c;">second_task</span><span style="color:#c0c5ce;">&#39;,</span><span style="color:#c0c5ce;">
+    )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    third_task = </span><span style="color:#bf616a;">DummyOperator</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">task_id</span><span style="color:#c0c5ce;">=&#39;</span><span style="color:#a3be8c;">third_task</span><span style="color:#c0c5ce;">&#39;,</span><span style="color:#c0c5ce;">
+    )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    first_task &gt;&gt; second_task &gt;&gt; third_task</span><span style="color:#c0c5ce;">
+</span></code></pre>
+<p>However:</p>
+<ul>
+<li>What if we want to send different types of notifications depending on the task? We're back to putting callbacks on each task.</li>
+<li>What if we want to send notifications to multiple places? We're stuck building wrappers around other callbacks.</li>
+</ul>
+<p>Because the code for attaching a notification to a task and routing that notification is intermingled, this makes callbacks hard to work with. What we need instead is a universal router we can attach to any task that will have a separate machanism to decide where to send events.</p>
+<h1 id="building-a-callback-router">Building A Callback Router</h1>
+<p>In order to have a router, we must first define the notion of routes. Routes for a success/failure/retry will be a yaml file of <code>notifier_type</code> (email, slack, etc) which have places they <code>send_to</code> given any number of <code>condition</code>s (which are arbitarry python expressions). More concretely, this will look like:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">&lt;notifier_type&gt;</span><span style="color:#c0c5ce;">
+    - send_to: &lt;who&gt;</span><span style="color:#c0c5ce;">
+      where:</span><span style="color:#c0c5ce;">
+        - &lt;condition&gt;</span><span style="color:#c0c5ce;">
+        - &lt;condition&gt;</span><span style="color:#c0c5ce;">
+        - &lt;...&gt;</span><span style="color:#c0c5ce;">
+</span></code></pre>
+<p>For example we could have</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#65737e;"># on_failure.yaml</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+</span><span style="color:#bf616a;">slack</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+    - </span><span style="color:#bf616a;">send_to</span><span style="color:#c0c5ce;">: &#39;</span><span style="color:#a3be8c;">#dataload_notifiactions</span><span style="color:#c0c5ce;">&#39;</span><span style="color:#c0c5ce;">
+      </span><span style="color:#bf616a;">where</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+        - </span><span style="color:#a3be8c;">airflow_environment==&quot;Production&quot;</span><span style="color:#c0c5ce;">
+        - </span><span style="color:#a3be8c;">dag_id == &quot;very_loud_dag&quot;</span><span style="color:#c0c5ce;">
+</span><span style="color:#bf616a;">email</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+    - </span><span style="color:#bf616a;">send_to</span><span style="color:#c0c5ce;">: &#39;</span><span style="color:#a3be8c;">staging_notifiactions@company.com</span><span style="color:#c0c5ce;">&#39;</span><span style="color:#c0c5ce;">
+      </span><span style="color:#bf616a;">where</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+        - </span><span style="color:#a3be8c;">airflow_environment==&quot;Staging&quot;</span><span style="color:#c0c5ce;">
+</span></code></pre>
+<p>Here we would send an email for every failure in staging and a slack message for every failure in production and any failure coming from <code>very_loud_dag</code>. Having an expressive human readable language for our routes allows us to easily make changes to notifications and understand where notifactions go without wading though all the business logic of the tasks themselves.</p>
+<p>Now we need code to represent our routes (a <code>Route</code> class), code to dispatch events (a <code>Router</code> class), and code to actually deal with sending notifications (a <code>Notifier</code> class).</p>
+<h2 id="routes">Routes</h2>
+<p>A <code>Route</code> is a simple wrapper arounnd our yaml rules. A route needs to know:</p>
+<ol>
+<li>When should a notification be sent?</li>
+<li>What is actually sending the notification?</li>
+<li>Who do we send a notification to?</li>
+</ol>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">Route = </span><span style="color:#bf616a;">namedtuple</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Route</span><span style="color:#c0c5ce;">&quot;, [&quot;</span><span style="color:#a3be8c;">condition</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">notifer_type</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">send_to</span><span style="color:#c0c5ce;">&quot;])</span><span style="color:#c0c5ce;">
+</span></code></pre><h2 id="router">Router</h2>
+<p>The <code>Router</code> is responsible for:</p>
+<ol>
+<li>Recieving events and figuring out whether they fullfill the <code>condition</code> on any <code>Route</code>s</li>
+<li>Enriching the context of events</li>
+<li>Passing the enriched context to the correct <code>Notifier</code>.</li>
+</ol>
+<p>When a <code>Router</code> is created it will look for a <code>routing_file</code> for its <code>router_type</code>. Then it will parse and store all the routes from that file. When a <code>Router</code> is called to route a particular event it will first enrich the context on the event it has recieved and then see if the conditions on any route match that context. If so, it will call the appropriate <code>Notifer</code> for that <code>Route</code> with the enriched context.</p>
+<p>Here's how we acomplish that:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">Router</span><span style="color:#eff1f5;">:</span><span style="color:#c0c5ce;">
+    </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+    Wouldn&#39;t it be nice to route some notifications</span><span style="color:#65737e;">
+    &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+    </span><span style="color:#65737e;"># Some example notifiers you may have</span><span style="color:#65737e;">
+    </span><span style="color:#c0c5ce;">notifiers = {</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">slack</span><span style="color:#c0c5ce;">&quot;: SlackNotifer,</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">email</span><span style="color:#c0c5ce;">&quot;: EmailNotifier,</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">page</span><span style="color:#c0c5ce;">&quot;: PagerDutyNotifier,</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">http</span><span style="color:#c0c5ce;">&quot;: HTTPNotifier,</span><span style="color:#c0c5ce;">
+    }</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    callback_base_path = </span><span style="color:#bf616a;">Path</span><span style="color:#c0c5ce;">(__file__).parent / &quot;</span><span style="color:#a3be8c;">routes</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    router_types = {</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">failure</span><span style="color:#c0c5ce;">&quot;: </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.callback_base_path / &quot;</span><span style="color:#a3be8c;">on_failure.yaml</span><span style="color:#c0c5ce;">&quot;,</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">success</span><span style="color:#c0c5ce;">&quot;: </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.callback_base_path / &quot;</span><span style="color:#a3be8c;">on_success.yaml</span><span style="color:#c0c5ce;">&quot;,</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">retry</span><span style="color:#c0c5ce;">&quot;: </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.callback_base_path / &quot;</span><span style="color:#a3be8c;">on_retry.yaml</span><span style="color:#c0c5ce;">&quot;,</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">sla_miss</span><span style="color:#c0c5ce;">&quot;: </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.callback_base_path / &quot;</span><span style="color:#a3be8c;">on_sla_miss_yaml</span><span style="color:#c0c5ce;">&quot;,</span><span style="color:#c0c5ce;">
+    }</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#96b5b4;">__init__</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">router_type</span><span style="color:#c0c5ce;">: str):</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+        `router_type` is one of</span><span style="color:#65737e;">
+        - failure</span><span style="color:#65737e;">
+        - retry</span><span style="color:#65737e;">
+        - success</span><span style="color:#65737e;">
+        - sla miss</span><span style="color:#65737e;">
+        It controls which rules file this router will load.</span><span style="color:#65737e;">
+        &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        log.</span><span style="color:#bf616a;">debug</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Creating Router for </span><span style="color:#d08770;">{}</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(router_type))</span><span style="color:#c0c5ce;">
+        routing_file = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.router_types.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(router_type)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">not routing_file:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">KeyError</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">Couldn&#39;t find routing file for type </span><span style="color:#d08770;">{}</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(router_type)</span><span style="color:#c0c5ce;">
+            )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.routes = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">make_routes</span><span style="color:#c0c5ce;">(routing_file)</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.router_type = router_type</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#96b5b4;">__call__</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, *</span><span style="color:#bf616a;">args</span><span style="color:#c0c5ce;">):</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+        Airflow has two types of callbacks:</span><span style="color:#65737e;">
+        1. on_success/failure/retry: Called by passing the context</span><span style="color:#65737e;">
+         `fn(context)`</span><span style="color:#65737e;">
+        2. sla_miss: Called by passing multiple args (via schedule_job.py)</span><span style="color:#65737e;">
+</span><span style="color:#65737e;">
+        This is a bit of a hack, but probably better than inspecting the call</span><span style="color:#65737e;">
+        stack</span><span style="color:#65737e;">
+        &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        log.</span><span style="color:#bf616a;">info</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">__call__</span><span style="color:#c0c5ce;">&quot;)</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">if </span><span style="color:#96b5b4;">len</span><span style="color:#c0c5ce;">(args) == </span><span style="color:#d08770;">1</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#65737e;"># we were passed a single var which is the context</span><span style="color:#65737e;">
+            </span><span style="color:#c0c5ce;">context = args[</span><span style="color:#d08770;">0</span><span style="color:#c0c5ce;">]</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">if </span><span style="color:#96b5b4;">len</span><span style="color:#c0c5ce;">(args) == </span><span style="color:#d08770;">5</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#65737e;"># passed multiple args that we pack up</span><span style="color:#65737e;">
+            # see https://github.com/apache/airflow/blob/7930234726c5e9cb9745cc7944047ac343ab832a/airflow/jobs/scheduler_job.py#L455</span><span style="color:#65737e;">
+            </span><span style="color:#c0c5ce;">keys = (</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">dag</span><span style="color:#c0c5ce;">&quot;,</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">task_list</span><span style="color:#c0c5ce;">&quot;,</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">blocking_task_list</span><span style="color:#c0c5ce;">&quot;,</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">slas</span><span style="color:#c0c5ce;">&quot;,</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">blocking_tis</span><span style="color:#c0c5ce;">&quot;,</span><span style="color:#c0c5ce;">
+            )</span><span style="color:#c0c5ce;">
+            context = {key: arg </span><span style="color:#b48ead;">for </span><span style="color:#c0c5ce;">key, arg </span><span style="color:#b48ead;">in </span><span style="color:#96b5b4;">zip</span><span style="color:#c0c5ce;">(keys, args)}</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">else</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">NotImplementedError</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">Passed a number of args we do not know how to deal with. </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+                </span><span style="color:#b48ead;">f</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">Passed </span><span style="color:#c0c5ce;">{</span><span style="color:#96b5b4;">len</span><span style="color:#c0c5ce;">(args)}&quot;</span><span style="color:#c0c5ce;">
+            )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+        context = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">enrich_context</span><span style="color:#c0c5ce;">(context)</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">if </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.routes:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">route</span><span style="color:#c0c5ce;">(context)</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">else</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+            log.</span><span style="color:#bf616a;">info</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">Note routes defined for dispatcher </span><span style="color:#d08770;">{}</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+                    </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.router_type</span><span style="color:#c0c5ce;">
+                )</span><span style="color:#c0c5ce;">
+            )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    @</span><span style="color:#96b5b4;">property</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">airflow_environment</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">) -&gt; str:</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+        An example of something you might want in `enrich_context`.</span><span style="color:#65737e;">
+</span><span style="color:#65737e;">
+        This will never get sent as part of the task instance context so we</span><span style="color:#65737e;">
+        patch it in.</span><span style="color:#65737e;">
+        &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        airflow_url = configuration.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">webserver</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">BASE_URL</span><span style="color:#c0c5ce;">&quot;)</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">airflow_url == &quot;</span><span style="color:#a3be8c;">your-production-url</span><span style="color:#c0c5ce;">&quot;:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">Staging</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">elif </span><span style="color:#c0c5ce;">airflow_url == &quot;</span><span style="color:#a3be8c;">your-staging-url</span><span style="color:#c0c5ce;">&quot;:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">Production</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">else</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">ValueError</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Unknown base_url </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;">. Abort.</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(airflow_url))</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">enrich_context</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">base_context</span><span style="color:#c0c5ce;">: dict) -&gt; dict:</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+        Enrich the context we get from the task with more useful information.</span><span style="color:#65737e;">
+        This makes writing some routing rules a bit easier.</span><span style="color:#65737e;">
+</span><span style="color:#65737e;">
+        Args:</span><span style="color:#65737e;">
+            base_context (dict): Generally the task instance context</span><span style="color:#65737e;">
+            See https://airflow.apache.org/code.html#macros for a list</span><span style="color:#65737e;">
+        &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        enriched_context = </span><span style="color:#bf616a;">dict</span><span style="color:#c0c5ce;">(base_context)</span><span style="color:#c0c5ce;">
+        enriched_context[&quot;</span><span style="color:#a3be8c;">airflow_environment</span><span style="color:#c0c5ce;">&quot;] = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.airflow_environment</span><span style="color:#c0c5ce;">
+        enriched_context[&quot;</span><span style="color:#a3be8c;">airflow_url</span><span style="color:#c0c5ce;">&quot;] = base_context.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">conf</span><span style="color:#c0c5ce;">&quot;).</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+            &quot;</span><span style="color:#a3be8c;">webserver</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">BASE_URL</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        )</span><span style="color:#c0c5ce;">
+        enriched_context[&quot;</span><span style="color:#a3be8c;">dag_id</span><span style="color:#c0c5ce;">&quot;] = base_context.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">dag</span><span style="color:#c0c5ce;">&quot;).dag_id</span><span style="color:#c0c5ce;">
+        enriched_context[&quot;</span><span style="color:#a3be8c;">task_id</span><span style="color:#c0c5ce;">&quot;] = base_context.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">task</span><span style="color:#c0c5ce;">&quot;).task_id</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">enriched_context</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">make_routes</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">routing_file</span><span style="color:#c0c5ce;">: Path) -&gt; List[Route]:</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+        Converts route file to a flat structure</span><span style="color:#65737e;">
+</span><span style="color:#65737e;">
+        We flatten the heiarchy of the route file to make it easier to use when</span><span style="color:#65737e;">
+        evaluating in a dag context.</span><span style="color:#65737e;">
+        &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">not routing_file.</span><span style="color:#bf616a;">exists</span><span style="color:#c0c5ce;">() or routing_file.</span><span style="color:#bf616a;">stat</span><span style="color:#c0c5ce;">().st_size == </span><span style="color:#d08770;">0</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+            log.</span><span style="color:#bf616a;">info</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Cannot work with routing file </span><span style="color:#d08770;">{}</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(routing_file))</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">[]</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">with </span><span style="color:#c0c5ce;">routing_file.</span><span style="color:#bf616a;">open</span><span style="color:#c0c5ce;">() </span><span style="color:#b48ead;">as </span><span style="color:#c0c5ce;">f:</span><span style="color:#c0c5ce;">
+            route_dict = yaml.</span><span style="color:#bf616a;">load</span><span style="color:#c0c5ce;">(f.</span><span style="color:#bf616a;">read</span><span style="color:#c0c5ce;">(), </span><span style="color:#bf616a;">Loader</span><span style="color:#c0c5ce;">=yaml.FullLoader)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">#  &lt;3 list comps</span><span style="color:#65737e;">
+        </span><span style="color:#c0c5ce;">routes = [</span><span style="color:#c0c5ce;">
+            </span><span style="color:#bf616a;">Route</span><span style="color:#c0c5ce;">(condition, notifier_type, route[&quot;</span><span style="color:#a3be8c;">send_to</span><span style="color:#c0c5ce;">&quot;])</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">for </span><span style="color:#c0c5ce;">notifier_type, routes </span><span style="color:#b48ead;">in </span><span style="color:#c0c5ce;">route_dict.</span><span style="color:#bf616a;">items</span><span style="color:#c0c5ce;">()</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">for </span><span style="color:#c0c5ce;">route </span><span style="color:#b48ead;">in </span><span style="color:#c0c5ce;">routes</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">for </span><span style="color:#c0c5ce;">condition </span><span style="color:#b48ead;">in </span><span style="color:#c0c5ce;">route[&quot;</span><span style="color:#a3be8c;">where</span><span style="color:#c0c5ce;">&quot;]</span><span style="color:#c0c5ce;">
+        ]</span><span style="color:#c0c5ce;">
+        log.</span><span style="color:#bf616a;">debug</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+            &quot;</span><span style="color:#a3be8c;">Created </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;"> routes for dispatcher </span><span style="color:#d08770;">{}</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+                </span><span style="color:#96b5b4;">len</span><span style="color:#c0c5ce;">(routes), </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.router_type</span><span style="color:#c0c5ce;">
+            )</span><span style="color:#c0c5ce;">
+        )</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">routes</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">route</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">ti_context</span><span style="color:#c0c5ce;">: dict):</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+        Routes a context when called</span><span style="color:#65737e;">
+        &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        log.</span><span style="color:#bf616a;">info</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Dispatching message</span><span style="color:#c0c5ce;">&quot;)</span><span style="color:#c0c5ce;">
+        messages_to_send = </span><span style="color:#96b5b4;">filter</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">lambda </span><span style="color:#bf616a;">route</span><span style="color:#c0c5ce;">: </span><span style="color:#96b5b4;">eval</span><span style="color:#c0c5ce;">(route.condition, </span><span style="color:#d08770;">None</span><span style="color:#c0c5ce;">, ti_context), </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.routes</span><span style="color:#c0c5ce;">
+        )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">for </span><span style="color:#c0c5ce;">message </span><span style="color:#b48ead;">in </span><span style="color:#c0c5ce;">messages_to_send:</span><span style="color:#c0c5ce;">
+            log.</span><span style="color:#bf616a;">info</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Sending message: </span><span style="color:#d08770;">{}</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(message))</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+            notifier = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">get_notifier</span><span style="color:#c0c5ce;">(message.notifier_type)</span><span style="color:#c0c5ce;">
+            notifier.</span><span style="color:#bf616a;">notify</span><span style="color:#c0c5ce;">(message.send_to, ti_context)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    @</span><span style="color:#bf616a;">lru_cache</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">maxsize</span><span style="color:#c0c5ce;">=</span><span style="color:#d08770;">5</span><span style="color:#c0c5ce;">)</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">get_notifier</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">notifier_type</span><span style="color:#c0c5ce;">: str):</span><span style="color:#c0c5ce;">
+        notifier = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.notifiers.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(notifier_type)</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">not notifier:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">KeyError</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">Could not find a notifier for </span><span style="color:#d08770;">{}</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(notifier_type)</span><span style="color:#c0c5ce;">
+            )</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#bf616a;">notifier</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.router_type)</span><span style="color:#c0c5ce;">
+</span></code></pre>
+<p>To use the <code>Router</code> we will create a router for every type of event we'd like notifications on and then use them as our <code>default_args</code> on the DAG level. For example:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">on_failure = </span><span style="color:#bf616a;">Router</span><span style="color:#c0c5ce;">(&#39;</span><span style="color:#a3be8c;">failure</span><span style="color:#c0c5ce;">&#39;)</span><span style="color:#c0c5ce;">
+on_retry = </span><span style="color:#bf616a;">Router</span><span style="color:#c0c5ce;">(&#39;</span><span style="color:#a3be8c;">retry</span><span style="color:#c0c5ce;">&#39;)</span><span style="color:#c0c5ce;">
+on_success = </span><span style="color:#bf616a;">Router</span><span style="color:#c0c5ce;">(&#39;</span><span style="color:#a3be8c;">success</span><span style="color:#c0c5ce;">&#39;)</span><span style="color:#c0c5ce;">
+on_sla_miss = </span><span style="color:#bf616a;">Router</span><span style="color:#c0c5ce;">(&#39;</span><span style="color:#a3be8c;">sla_miss</span><span style="color:#c0c5ce;">&#39;)</span><span style="color:#c0c5ce;">
+</span></code></pre>
+<p>Then in the DAG code:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#c0c5ce;">default_args = {</span><span style="color:#c0c5ce;">
+    &#39;</span><span style="color:#a3be8c;">on_failure_callback</span><span style="color:#c0c5ce;">&#39;: slack_failure_callback,</span><span style="color:#c0c5ce;">
+    &#39;</span><span style="color:#a3be8c;">on_retry_callback</span><span style="color:#c0c5ce;">&#39;: slack_retry_callback,</span><span style="color:#c0c5ce;">
+    &#39;</span><span style="color:#a3be8c;">on_success_callback</span><span style="color:#c0c5ce;">&#39;: slack_success_callback,</span><span style="color:#c0c5ce;">
+}</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+</span><span style="color:#b48ead;">with </span><span style="color:#bf616a;">DAG</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+    </span><span style="color:#bf616a;">dag_id</span><span style="color:#c0c5ce;">=&#39;</span><span style="color:#a3be8c;">my_dag</span><span style="color:#c0c5ce;">&#39;,</span><span style="color:#c0c5ce;">
+    </span><span style="color:#bf616a;">default_args</span><span style="color:#c0c5ce;">=default_args,</span><span style="color:#c0c5ce;">
+    </span><span style="color:#bf616a;">sla_miss_callbac</span><span style="color:#c0c5ce;">=on_sla_miss,</span><span style="color:#c0c5ce;">
+) </span><span style="color:#b48ead;">as </span><span style="color:#c0c5ce;">dag:</span><span style="color:#c0c5ce;">
+    </span><span style="color:#65737e;">### the rest of your code here</span><span style="color:#65737e;">
+</span></code></pre><h2 id="notifier">Notifier</h2>
+<p>Finally we need to create all the classes that will actually send our messages. All we need is for the <code>__init__</code> function to take a <code>notifier_type</code> argument and for the class to implement a <code>notify</code> method, taking <code>send_to</code> and <code>context</code> arguments.</p>
+<p>An example set of notifers would look like:</p>
+<pre style="background-color:#2b303b;">
+<code><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">GenericNotifier</span><span style="color:#eff1f5;">:</span><span style="color:#c0c5ce;">
+    </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+    Shamelessly taken from `callback_wrappers` in moneytree</span><span style="color:#65737e;">
+    &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#65737e;"># Unique TI identifier</span><span style="color:#65737e;">
+    </span><span style="color:#c0c5ce;">ti_id = &quot;</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> dag.dag_id </span><span style="color:#96b5b4;">}}</span><span style="color:#a3be8c;">.</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> task.task_id </span><span style="color:#96b5b4;">}}</span><span style="color:#a3be8c;"> [</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> ts </span><span style="color:#96b5b4;">}}</span><span style="color:#a3be8c;">]</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    ti_url = (</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> airflow_url </span><span style="color:#96b5b4;">}}</span><span style="color:#a3be8c;">/task?</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">task_id=</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> task.task_id </span><span style="color:#96b5b4;">}}</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">&amp;dag_id=</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> dag.dag_id </span><span style="color:#96b5b4;">}}</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">&amp;execution_date=</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> ts | urlencode </span><span style="color:#96b5b4;">}}</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+    )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    log_url = (</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> airflow_url </span><span style="color:#96b5b4;">}}</span><span style="color:#a3be8c;">/log?</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">task_id=</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> task.task_id </span><span style="color:#96b5b4;">}}</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">&amp;dag_id=</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> dag.dag_id </span><span style="color:#96b5b4;">}}</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        &quot;</span><span style="color:#a3be8c;">&amp;execution_date=</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> ts | urlencode </span><span style="color:#96b5b4;">}}</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+    )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    graph_url = &quot;</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> airflow_url </span><span style="color:#96b5b4;">}}</span><span style="color:#a3be8c;">/graph?dag_id=</span><span style="color:#96b5b4;">{{</span><span style="color:#a3be8c;"> dag.dag_id </span><span style="color:#96b5b4;">}}</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#65737e;"># Uses magic Slack formatting to create a &lt;pre&gt; section that&#39;s also a link!</span><span style="color:#65737e;">
+    </span><span style="color:#c0c5ce;">prefix = &quot;</span><span style="color:#a3be8c;">&lt;</span><span style="color:#d08770;">{ti_url}</span><span style="color:#a3be8c;">|`</span><span style="color:#d08770;">{ti_id}</span><span style="color:#a3be8c;">`&gt;</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">ti_url</span><span style="color:#c0c5ce;">=ti_url, </span><span style="color:#bf616a;">ti_id</span><span style="color:#c0c5ce;">=ti_id)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">get_jinja_env</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">context</span><span style="color:#c0c5ce;">: dict):</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+        Given a context, return an appropriate Jinja environment.</span><span style="color:#65737e;">
+        &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        dag = context.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">dag</span><span style="color:#c0c5ce;">&quot;)</span><span style="color:#c0c5ce;">
+        jinja_env = dag.</span><span style="color:#bf616a;">get_template_env</span><span style="color:#c0c5ce;">() </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">dag </span><span style="color:#b48ead;">else </span><span style="color:#c0c5ce;">jinja2.</span><span style="color:#bf616a;">Environment</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">cache_size</span><span style="color:#c0c5ce;">=</span><span style="color:#d08770;">0</span><span style="color:#c0c5ce;">)</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">jinja_env</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">jinja_template</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">text</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">context</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">jinja_env</span><span style="color:#c0c5ce;">):</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">&quot;&quot;&quot;</span><span style="color:#65737e;">
+        Return the templated string.</span><span style="color:#65737e;">
+        &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">jinja_env.</span><span style="color:#bf616a;">from_string</span><span style="color:#c0c5ce;">(text).</span><span style="color:#bf616a;">render</span><span style="color:#c0c5ce;">(**context)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+</span><span style="color:#eff1f5;">
+</span><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">SlackNotifer</span><span style="color:#eff1f5;">(</span><span style="color:#a3be8c;">GenericNotifier</span><span style="color:#eff1f5;">):</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#96b5b4;">__init__</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">notifier_type</span><span style="color:#c0c5ce;">: str):</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.notifier_type = notifier_type</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.message_tmpl = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">get_message_tmpl</span><span style="color:#c0c5ce;">(notifier_type)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">get_message_tmpl</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">notifier_type</span><span style="color:#c0c5ce;">: str) -&gt; str:</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">notifier_type == &quot;</span><span style="color:#a3be8c;">success</span><span style="color:#c0c5ce;">&quot;:</span><span style="color:#c0c5ce;">
+            tmpl = &quot;</span><span style="color:#a3be8c;">:success:</span><span style="color:#c0c5ce;">&quot; + </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.prefix + &quot;</span><span style="color:#a3be8c;"> is complete.</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">elif </span><span style="color:#c0c5ce;">notifier_type == &quot;</span><span style="color:#a3be8c;">failure</span><span style="color:#c0c5ce;">&quot;:</span><span style="color:#c0c5ce;">
+            tmpl = &quot;</span><span style="color:#a3be8c;">:x:</span><span style="color:#c0c5ce;">&quot; + </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.prefix + &quot;</span><span style="color:#a3be8c;"> has failed!</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">elif </span><span style="color:#c0c5ce;">notifier_type == &quot;</span><span style="color:#a3be8c;">retry</span><span style="color:#c0c5ce;">&quot;:</span><span style="color:#c0c5ce;">
+            tmpl = &quot;</span><span style="color:#a3be8c;">:warning:</span><span style="color:#c0c5ce;">&quot; + </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.prefix + &quot;</span><span style="color:#a3be8c;"> has retried!</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">elif </span><span style="color:#c0c5ce;">notifier_type == &quot;</span><span style="color:#a3be8c;">sla_miss</span><span style="color:#c0c5ce;">&quot;:</span><span style="color:#c0c5ce;">
+            tmpl = &quot;</span><span style="color:#a3be8c;">:warning:</span><span style="color:#c0c5ce;">&quot; + </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.prefix + &quot;</span><span style="color:#a3be8c;"> has missed its sla!</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">else</span><span style="color:#c0c5ce;">:</span><span style="color:#c0c5ce;">
+            </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">NotImplementedError</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+                &quot;</span><span style="color:#a3be8c;">No message template for type </span><span style="color:#d08770;">{}</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(notifier_type)</span><span style="color:#c0c5ce;">
+            )</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">tmpl</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">get_username</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">dag_id</span><span style="color:#c0c5ce;">: str, </span><span style="color:#bf616a;">airflow_environment</span><span style="color:#c0c5ce;">: str, **</span><span style="color:#bf616a;">context</span><span style="color:#c0c5ce;">) -&gt; str:</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">dag_id + &quot;</span><span style="color:#a3be8c;">[</span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;">]</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(airflow_environment)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    @</span><span style="color:#96b5b4;">property</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">slack_link</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">):</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">&lt;</span><span style="color:#d08770;">{ti_url}</span><span style="color:#a3be8c;">|`</span><span style="color:#d08770;">{ti_id}</span><span style="color:#a3be8c;">`&gt;</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">ti_url</span><span style="color:#c0c5ce;">=</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.ti_url, </span><span style="color:#bf616a;">ti_id</span><span style="color:#c0c5ce;">=</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.ti_id)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    @</span><span style="color:#96b5b4;">property</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">token</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">) -&gt; str:</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">Variable.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">slack_token</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">foobar</span><span style="color:#c0c5ce;">&quot;)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">notify</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">send_to</span><span style="color:#c0c5ce;">: str, </span><span style="color:#bf616a;">context</span><span style="color:#c0c5ce;">: dict):</span><span style="color:#c0c5ce;">
+        jinja_env = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">get_jinja_env</span><span style="color:#c0c5ce;">(context)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+        slack_kwargs = {}</span><span style="color:#c0c5ce;">
+        slack_kwargs[&quot;</span><span style="color:#a3be8c;">channel</span><span style="color:#c0c5ce;">&quot;] = send_to</span><span style="color:#c0c5ce;">
+        slack_kwargs[&quot;</span><span style="color:#a3be8c;">text</span><span style="color:#c0c5ce;">&quot;] = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">jinja_template</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+            </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.message_tmpl, context, jinja_env</span><span style="color:#c0c5ce;">
+        )</span><span style="color:#c0c5ce;">
+        slack_kwargs[&quot;</span><span style="color:#a3be8c;">username</span><span style="color:#c0c5ce;">&quot;] = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">get_username</span><span style="color:#c0c5ce;">(**context)</span><span style="color:#c0c5ce;">
+        slack_kwargs[&quot;</span><span style="color:#a3be8c;">icon_url</span><span style="color:#c0c5ce;">&quot;] = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.icon_url</span><span style="color:#c0c5ce;">
+        log.</span><span style="color:#bf616a;">info</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Sending message: &#39;</span><span style="color:#d08770;">%s</span><span style="color:#a3be8c;">&#39;</span><span style="color:#c0c5ce;">&quot;, json.</span><span style="color:#bf616a;">dumps</span><span style="color:#c0c5ce;">(slack_kwargs))</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">SlackAPIPostOperator</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+            </span><span style="color:#bf616a;">task_id</span><span style="color:#c0c5ce;">=&quot;</span><span style="color:#a3be8c;">tmp_slack</span><span style="color:#c0c5ce;">&quot;, </span><span style="color:#bf616a;">token</span><span style="color:#c0c5ce;">=</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.token, **slack_kwargs</span><span style="color:#c0c5ce;">
+        ).</span><span style="color:#bf616a;">execute</span><span style="color:#c0c5ce;">()</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+</span><span style="color:#eff1f5;">
+</span><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">EmailNotifier</span><span style="color:#eff1f5;">(</span><span style="color:#a3be8c;">GenericNotifier</span><span style="color:#eff1f5;">):</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#96b5b4;">__init__</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">notifier_type</span><span style="color:#c0c5ce;">: str):</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.notifier_type = notifier_type</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.message_tmpl = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">get_message_tmpl</span><span style="color:#c0c5ce;">()</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">get_message_tmpl</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">) -&gt; str:</span><span style="color:#c0c5ce;">
+        </span><span style="color:#65737e;">&quot;&quot;&quot;Get a template for the message</span><span style="color:#65737e;">
+</span><span style="color:#65737e;">
+        Returns:</span><span style="color:#65737e;">
+            str -- Message template that jinja will render</span><span style="color:#65737e;">
+        &quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        html_template = &quot;&quot;&quot;</span><span style="color:#a3be8c;">
+        &lt;html&gt;</span><span style="color:#a3be8c;">
+        &lt;body&gt;</span><span style="color:#a3be8c;">
+            Task Instance: &lt;a href=&quot;</span><span style="color:#d08770;">{ti_url}</span><span style="color:#a3be8c;">&quot;&gt;Link&lt;/a&gt; &lt;br /&gt;</span><span style="color:#a3be8c;">
+            Log: &lt;a href=&quot;</span><span style="color:#d08770;">{log_url}</span><span style="color:#a3be8c;">&quot;&gt;Link&lt;/a&gt; &lt;br /&gt;</span><span style="color:#a3be8c;">
+            Graph: &lt;a href=&quot;</span><span style="color:#d08770;">{graph_url}</span><span style="color:#a3be8c;">&quot;&gt;Link&lt;/a&gt; &lt;br /&gt;</span><span style="color:#a3be8c;">
+        &lt;/body&gt;</span><span style="color:#a3be8c;">
+        &lt;html&gt;</span><span style="color:#a3be8c;">
+        </span><span style="color:#c0c5ce;">&quot;&quot;&quot;</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">html_template.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+            </span><span style="color:#bf616a;">ti_url</span><span style="color:#c0c5ce;">=</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.ti_url, </span><span style="color:#bf616a;">log_url</span><span style="color:#c0c5ce;">=</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.log_url, </span><span style="color:#bf616a;">graph_url</span><span style="color:#c0c5ce;">=</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.graph_url</span><span style="color:#c0c5ce;">
+        )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">get_subject</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">context</span><span style="color:#c0c5ce;">: dict) -&gt; str:</span><span style="color:#c0c5ce;">
+        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">Airflow </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;"> alert: &lt;</span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;"> [</span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;">]&gt;</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(</span><span style="color:#c0c5ce;">
+            context.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">airflow_environment</span><span style="color:#c0c5ce;">&quot;),</span><span style="color:#c0c5ce;">
+            context.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">task_instance_key_str</span><span style="color:#c0c5ce;">&quot;),</span><span style="color:#c0c5ce;">
+            </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.notifier_type,</span><span style="color:#c0c5ce;">
+        )</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">notify</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">send_to</span><span style="color:#c0c5ce;">: str, </span><span style="color:#bf616a;">context</span><span style="color:#c0c5ce;">: dict):</span><span style="color:#c0c5ce;">
+        jinja_env = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">get_jinja_env</span><span style="color:#c0c5ce;">(context)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+        text = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">jinja_template</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.message_tmpl, context, jinja_env)</span><span style="color:#c0c5ce;">
+        subject = </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">get_subject</span><span style="color:#c0c5ce;">(context)</span><span style="color:#c0c5ce;">
+        </span><span style="color:#bf616a;">some_function_that_sends_emails</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">to</span><span style="color:#c0c5ce;">=send_to, </span><span style="color:#bf616a;">subject</span><span style="color:#c0c5ce;">=subject, </span><span style="color:#bf616a;">html_content</span><span style="color:#c0c5ce;">=text)</span><span style="color:#c0c5ce;">
+</span><span style="color:#c0c5ce;">
+</span></code></pre>
+<p>That's it! Now airflow will route all notifcations to our <code>Router</code>s, which will evalute them againsts the conditions in our <code>Route</code>s and send them using the right <code>Notifer</code>s.</p>
+<h1 id="room-for-improvement">Room for Improvement</h1>
+<p>Forthcoming post covering:</p>
+<ul>
+<li>making sure yaml conditions are valid</li>
+<li>making router cleaner</li>
+<li>being more efficient with our notifiers</li>
+<li>enforcing the interface on notifiers</li>
+</ul>
+<h1 id="putting-it-all-together">Putting it all together</h1>
+<p>All the code in one place: <a href="https://gist.github.com/gerrymanoim/83b08008b2eefd2a20cb4fc38aa25544">https://gist.github.com/gerrymanoim/83b08008b2eefd2a20cb4fc38aa25544</a></p>
+</section>
+</article>
+</div>
+
+  </div>
+
+<script src="/livereload.js?port=1024&amp;mindelay=10"></script></body>
+
+</html>

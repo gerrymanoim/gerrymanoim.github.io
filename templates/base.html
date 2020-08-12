@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Web Things</title>
+  <link rel="stylesheet" href="/app.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+  <div id="banner">
+    <div id="logo">
+        <!-- TODO Logo or other picture-->
+        <a href="/" id="home-link">home</a>
+    </div>
+    <div id="top-menu">
+        <a href="{{get_url(path="@/about/index.md")}}">about</a>
+        <a href="http://github.com/gerrymanoim/">github</a>
+    </div>
+    <div style="clear:both"></div>
+  </div>
+  <div id="main-column">
+    {% block content %}
+    {% endblock %}
+  </div>
+
+</body>
+
+</html>

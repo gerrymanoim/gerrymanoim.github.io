@@ -1,0 +1,27 @@
+
+name: Main
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-publish:
+    name: Build and Publish to GH Pages
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - name: Install Zola
+      run: |
+        sudo snap install zola --edge
+    - name: Build Site
+      run: |
+        zola build
+    - name: Deploy the site
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./public

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>http://127.0.0.1:1111/</loc>
+    </url>
+    <url>
+        <loc>http://127.0.0.1:1111/about/</loc>
+    </url>
+    <url>
+        <loc>http://127.0.0.1:1111/categories/</loc>
+    </url>
+    <url>
+        <loc>http://127.0.0.1:1111/categories/useful-airflow-patterns/</loc>
+    </url>
+    <url>
+        <loc>http://127.0.0.1:1111/recent-code/</loc>
+    </url>
+    <url>
+        <loc>http://127.0.0.1:1111/writings/</loc>
+    </url>
+    <url>
+        <loc>http://127.0.0.1:1111/writings/dag-environments/</loc>
+    </url>
+    <url>
+        <loc>http://127.0.0.1:1111/writings/ftp-cloning-with-aws-lambda/</loc>
+    </url>
+    <url>
+        <loc>http://127.0.0.1:1111/writings/notification-callbacks/</loc>
+    </url>
+    <url>
+        <loc>http://127.0.0.1:1111/writings/timezone-aware-slas/</loc>
+    </url>
+</urlset>

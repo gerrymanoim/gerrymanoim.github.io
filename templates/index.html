@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="left-column">
+  <h2>Recent Writing</h2>
+  {% set section = get_section(path="writings/_index.md") %}
+  <ul>
+    {% for page in section.pages %}
+    <li><a href="{{ page.permalink | safe }}">{{ page.title }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+<div class="right-bar">
+  <h2>Recent Code</h2>
+  {% set page = get_page(path="recent-code.md") %}
+  {{ page.content | safe }}
+</div>
+{% endblock content %}
