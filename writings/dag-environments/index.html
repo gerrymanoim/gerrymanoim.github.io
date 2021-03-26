@@ -36,13 +36,13 @@
     
   <section><p>A common way to run airflow is a stating/production instance where DAGs are tested in staging and then promoted to production. You'd like the same files to run in staging and production, but you don't want staging workflows interfering with production (touching the same files, kicking off the same proceses, etc). Since DAGs are just python files, a common pattern is to disambiguate your deployements by storing a airlfow variable/enviornment variable with the environment and then using it like so:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#c0c5ce;">airflow_environment = os.environ[&quot;</span><span style="color:#a3be8c;">AIRFLOW_ENVIRONMENT</span><span style="color:#c0c5ce;">&quot;]
+<code class="language-python" data-lang="python"><span style="color:#c0c5ce;">airflow_environment = os.environ[&quot;</span><span style="color:#a3be8c;">AIRFLOW_ENVIRONMENT</span><span style="color:#c0c5ce;">&quot;]
 </span><span style="color:#65737e;"># or alternatively if you&#39;ve exported the env as `AIRFLOW_VAR_AIRFLOW_ENVIRONMENT`
 </span><span style="color:#c0c5ce;">airflow_environemnt = Variable.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">airflow_environment</span><span style="color:#c0c5ce;">&quot;)
 </span></code></pre>
 <p>Then in your code, when setting enviornment dependent resouces you switch on <code>airflow_environment</code>:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">airflow_environment == &quot;</span><span style="color:#a3be8c;">production</span><span style="color:#c0c5ce;">&quot;:
+<code class="language-python" data-lang="python"><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">airflow_environment == &quot;</span><span style="color:#a3be8c;">production</span><span style="color:#c0c5ce;">&quot;:
     s3_bucket = &quot;</span><span style="color:#a3be8c;">my-prod-bucket</span><span style="color:#c0c5ce;">&quot;
 </span><span style="color:#b48ead;">elif </span><span style="color:#c0c5ce;">airflow_environemnt == &quot;</span><span style="color:#a3be8c;">staging</span><span style="color:#c0c5ce;">&quot;:
     s3_bucket = &quot;</span><span style="color:#a3be8c;">my-staging-bucket</span><span style="color:#c0c5ce;">&quot;
@@ -52,7 +52,7 @@
 </span></code></pre>
 <p>Alternatively you might wrap this logic in a function call:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">get_s3_bucket</span><span style="color:#c0c5ce;">():
+<code class="language-python" data-lang="python"><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">get_s3_bucket</span><span style="color:#c0c5ce;">():
     </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">airflow_environment == &quot;</span><span style="color:#a3be8c;">production</span><span style="color:#c0c5ce;">&quot;:
         </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">my-prod-bucket</span><span style="color:#c0c5ce;">&quot;
     </span><span style="color:#b48ead;">elif </span><span style="color:#c0c5ce;">airflow_environemnt == &quot;</span><span style="color:#a3be8c;">staging</span><span style="color:#c0c5ce;">&quot;:
@@ -70,7 +70,7 @@
 </span></code></pre>
 <p>Using this pattern quickly leads to sprawl and makes refactoring (or adding envs) a pain. A better pattern is to wrap anything environment dependent into a central class that can be used anywhere. For example:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">os
+<code class="language-python" data-lang="python"><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">os
 </span><span style="color:#b48ead;">from </span><span style="color:#c0c5ce;">typing </span><span style="color:#b48ead;">import </span><span style="color:#d08770;">*
 
 </span><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">DAGEnvironment</span><span style="color:#eff1f5;">:
@@ -119,7 +119,7 @@
 <p>Putting all the environment switching logic in a class (and in one place in the class) helps encapsualte the logic and leads to cleaner, more understandable, less brittle code.</p>
 <p>We can now use it:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#b48ead;">from .</span><span style="color:#c0c5ce;">dag_environment </span><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">DAGEnvironment
+<code class="language-python" data-lang="python"><span style="color:#b48ead;">from .</span><span style="color:#c0c5ce;">dag_environment </span><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">DAGEnvironment
 
 env = </span><span style="color:#bf616a;">DAGEnvironment</span><span style="color:#c0c5ce;">()
 

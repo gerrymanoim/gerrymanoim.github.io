@@ -41,7 +41,7 @@
 <p>Then you want to create a lambda function an add <code>ObjectCreated</code> triggers for any source bucket (buckets your production airflow instances are copying files to).</p>
 <p>Then we need a structure to hold our rules:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#65737e;"># An `S3Router` will be:
+<code class="language-python" data-lang="python"><span style="color:#65737e;"># An `S3Router` will be:
 # Dict[str, Tuple[str, Union[None, callable]]
 # S3Router = {
 #    &#39;src_key_pattern&#39;: (&#39;dest_bucket&#39;, &#39;dest_key&#39;)
@@ -63,7 +63,7 @@
 <p>Here - we'd like to grab the  <code>a_very_important_file</code> and move them to our staging s3 bucket without making any modifications to the s3 key. We'd also like to grab <code>a_different_file</code> and move it to our AWS Transfer bucket under the path we would have picked it up from.</p>
 <p>Then we create the actual funciton that does the work:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">boto3
+<code class="language-python" data-lang="python"><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">boto3
 </span><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">re
 </span><span style="color:#b48ead;">from </span><span style="color:#c0c5ce;">pathlib </span><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">Path
 

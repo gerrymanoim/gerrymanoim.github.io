@@ -39,7 +39,7 @@
 <h2 id="motivations-for-better-callbacks">Motivations for Better Callbacks</h2>
 <p>Traditionally in airflow one manages notifications for tasks via the <code>on_success_callback</code> and <code>on_failure_callback</code> which take a <code>Callable</code>. For example, you often see something like:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#b48ead;">from . import </span><span style="color:#c0c5ce;">(
+<code class="language-python" data-lang="python"><span style="color:#b48ead;">from . import </span><span style="color:#c0c5ce;">(
     slack_failure_callback,
     slack_retry_callback,
     slack_success_callback
@@ -72,7 +72,7 @@
 </span></code></pre>
 <p>This gets rather repetitive quickly. Luckily airflow provides a <code>default_args</code> mechanism on the <code>DAG</code> level, so we could instead do something like:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#b48ead;">from . import </span><span style="color:#c0c5ce;">(
+<code class="language-python" data-lang="python"><span style="color:#b48ead;">from . import </span><span style="color:#c0c5ce;">(
     slack_failure_callback,
     slack_retry_callback,
     slack_success_callback
@@ -121,7 +121,7 @@
 </span></code></pre>
 <p>For example we could have</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#65737e;"># on_failure.yaml
+<code class="language-yaml" data-lang="yaml"><span style="color:#65737e;"># on_failure.yaml
 
 </span><span style="color:#bf616a;">slack</span><span style="color:#c0c5ce;">:
     - </span><span style="color:#bf616a;">send_to</span><span style="color:#c0c5ce;">: &#39;</span><span style="color:#a3be8c;">#dataload_notifiactions</span><span style="color:#c0c5ce;">&#39;
@@ -143,7 +143,7 @@ email</span><span style="color:#c0c5ce;">:
 <li>Who do we send a notification to?</li>
 </ol>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#c0c5ce;">Route = </span><span style="color:#bf616a;">namedtuple</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Route</span><span style="color:#c0c5ce;">&quot;, [&quot;</span><span style="color:#a3be8c;">condition</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">notifer_type</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">send_to</span><span style="color:#c0c5ce;">&quot;])
+<code class="language-python" data-lang="python"><span style="color:#c0c5ce;">Route = </span><span style="color:#bf616a;">namedtuple</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Route</span><span style="color:#c0c5ce;">&quot;, [&quot;</span><span style="color:#a3be8c;">condition</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">notifer_type</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">send_to</span><span style="color:#c0c5ce;">&quot;])
 </span></code></pre><h2 id="router">Router</h2>
 <p>The <code>Router</code> is responsible for:</p>
 <ol>
@@ -154,7 +154,7 @@ email</span><span style="color:#c0c5ce;">:
 <p>When a <code>Router</code> is created it will look for a <code>routing_file</code> for its <code>router_type</code>. Then it will parse and store all the routes from that file. When a <code>Router</code> is called to route a particular event it will first enrich the context on the event it has recieved and then see if the conditions on any route match that context. If so, it will call the appropriate <code>Notifer</code> for that <code>Route</code> with the enriched context.</p>
 <p>Here's how we acomplish that:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">Router</span><span style="color:#eff1f5;">:
+<code class="language-python" data-lang="python"><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">Router</span><span style="color:#eff1f5;">:
     </span><span style="color:#65737e;">&quot;&quot;&quot;
     Wouldn&#39;t it be nice to route some notifications
     &quot;&quot;&quot;
@@ -325,14 +325,14 @@ email</span><span style="color:#c0c5ce;">:
 </span></code></pre>
 <p>To use the <code>Router</code> we will create a router for every type of event we'd like notifications on and then use them as our <code>default_args</code> on the DAG level. For example:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#c0c5ce;">on_failure = </span><span style="color:#bf616a;">Router</span><span style="color:#c0c5ce;">(&#39;</span><span style="color:#a3be8c;">failure</span><span style="color:#c0c5ce;">&#39;)
+<code class="language-python" data-lang="python"><span style="color:#c0c5ce;">on_failure = </span><span style="color:#bf616a;">Router</span><span style="color:#c0c5ce;">(&#39;</span><span style="color:#a3be8c;">failure</span><span style="color:#c0c5ce;">&#39;)
 on_retry = </span><span style="color:#bf616a;">Router</span><span style="color:#c0c5ce;">(&#39;</span><span style="color:#a3be8c;">retry</span><span style="color:#c0c5ce;">&#39;)
 on_success = </span><span style="color:#bf616a;">Router</span><span style="color:#c0c5ce;">(&#39;</span><span style="color:#a3be8c;">success</span><span style="color:#c0c5ce;">&#39;)
 on_sla_miss = </span><span style="color:#bf616a;">Router</span><span style="color:#c0c5ce;">(&#39;</span><span style="color:#a3be8c;">sla_miss</span><span style="color:#c0c5ce;">&#39;)
 </span></code></pre>
 <p>Then in the DAG code:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#c0c5ce;">default_args = {
+<code class="language-python" data-lang="python"><span style="color:#c0c5ce;">default_args = {
     &#39;</span><span style="color:#a3be8c;">on_failure_callback</span><span style="color:#c0c5ce;">&#39;: slack_failure_callback,
     &#39;</span><span style="color:#a3be8c;">on_retry_callback</span><span style="color:#c0c5ce;">&#39;: slack_retry_callback,
     &#39;</span><span style="color:#a3be8c;">on_success_callback</span><span style="color:#c0c5ce;">&#39;: slack_success_callback,
@@ -348,7 +348,7 @@ on_sla_miss = </span><span style="color:#bf616a;">Router</span><span style="colo
 <p>Finally we need to create all the classes that will actually send our messages. All we need is for the <code>__init__</code> function to take a <code>notifier_type</code> argument and for the class to implement a <code>notify</code> method, taking <code>send_to</code> and <code>context</code> arguments.</p>
 <p>An example set of notifers would look like:</p>
 <pre style="background-color:#2b303b;">
-<code><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">GenericNotifier</span><span style="color:#eff1f5;">:
+<code class="language-python" data-lang="python"><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">GenericNotifier</span><span style="color:#eff1f5;">:
     </span><span style="color:#65737e;">&quot;&quot;&quot;
     Shamelessly taken from `callback_wrappers` in moneytree
     &quot;&quot;&quot;
