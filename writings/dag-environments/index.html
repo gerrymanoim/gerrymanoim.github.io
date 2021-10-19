@@ -15,7 +15,7 @@
         <a href="/" id="home-link">home</a>
     </div>
     <div id="top-menu">
-        <a href="https:&#x2F;&#x2F;gerrymanoim.github.io&#x2F;about&#x2F;">about</a>
+        <a href="https://gerrymanoim.github.io/about/">about</a>
         <a href="http://github.com/gerrymanoim/">github</a>
     </div>
     <div style="clear:both"></div>
@@ -35,98 +35,94 @@
       
     
   <section><p>A common way to run airflow is a stating/production instance where DAGs are tested in staging and then promoted to production. You'd like the same files to run in staging and production, but you don't want staging workflows interfering with production (touching the same files, kicking off the same proceses, etc). Since DAGs are just python files, a common pattern is to disambiguate your deployements by storing a airlfow variable/enviornment variable with the environment and then using it like so:</p>
-<pre style="background-color:#2b303b;">
-<code class="language-python" data-lang="python"><span style="color:#c0c5ce;">airflow_environment = os.environ[&quot;</span><span style="color:#a3be8c;">AIRFLOW_ENVIRONMENT</span><span style="color:#c0c5ce;">&quot;]
-</span><span style="color:#65737e;"># or alternatively if you&#39;ve exported the env as `AIRFLOW_VAR_AIRFLOW_ENVIRONMENT`
-</span><span style="color:#c0c5ce;">airflow_environemnt = Variable.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">airflow_environment</span><span style="color:#c0c5ce;">&quot;)
-</span></code></pre>
+<pre data-lang="python" class="language-python "><code class="language-python" data-lang="python">airflow_environment = os.environ[&quot;AIRFLOW_ENVIRONMENT&quot;]
+# or alternatively if you&#x27;ve exported the env as `AIRFLOW_VAR_AIRFLOW_ENVIRONMENT`
+airflow_environemnt = Variable.get(&quot;airflow_environment&quot;)
+</code></pre>
 <p>Then in your code, when setting enviornment dependent resouces you switch on <code>airflow_environment</code>:</p>
-<pre style="background-color:#2b303b;">
-<code class="language-python" data-lang="python"><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">airflow_environment == &quot;</span><span style="color:#a3be8c;">production</span><span style="color:#c0c5ce;">&quot;:
-    s3_bucket = &quot;</span><span style="color:#a3be8c;">my-prod-bucket</span><span style="color:#c0c5ce;">&quot;
-</span><span style="color:#b48ead;">elif </span><span style="color:#c0c5ce;">airflow_environemnt == &quot;</span><span style="color:#a3be8c;">staging</span><span style="color:#c0c5ce;">&quot;:
-    s3_bucket = &quot;</span><span style="color:#a3be8c;">my-staging-bucket</span><span style="color:#c0c5ce;">&quot;
-</span><span style="color:#b48ead;">else</span><span style="color:#c0c5ce;">:
-    </span><span style="color:#65737e;"># make sure we don&#39;t screw this up
-    </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">ValueError</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Unknown Airflow Environment</span><span style="color:#c0c5ce;">&quot;)
-</span></code></pre>
+<pre data-lang="python" class="language-python "><code class="language-python" data-lang="python">if airflow_environment == &quot;production&quot;:
+    s3_bucket = &quot;my-prod-bucket&quot;
+elif airflow_environemnt == &quot;staging&quot;:
+    s3_bucket = &quot;my-staging-bucket&quot;
+else:
+    # make sure we don&#x27;t screw this up
+    raise ValueError(&quot;Unknown Airflow Environment&quot;)
+</code></pre>
 <p>Alternatively you might wrap this logic in a function call:</p>
-<pre style="background-color:#2b303b;">
-<code class="language-python" data-lang="python"><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">get_s3_bucket</span><span style="color:#c0c5ce;">():
-    </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">airflow_environment == &quot;</span><span style="color:#a3be8c;">production</span><span style="color:#c0c5ce;">&quot;:
-        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">my-prod-bucket</span><span style="color:#c0c5ce;">&quot;
-    </span><span style="color:#b48ead;">elif </span><span style="color:#c0c5ce;">airflow_environemnt == &quot;</span><span style="color:#a3be8c;">staging</span><span style="color:#c0c5ce;">&quot;:
-        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">my-staging-bucket</span><span style="color:#c0c5ce;">&quot;
-    </span><span style="color:#b48ead;">else</span><span style="color:#c0c5ce;">:
-        </span><span style="color:#65737e;"># make sure we don&#39;t screw this up
-        </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">ValueError</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Unknown Airflow Environment</span><span style="color:#c0c5ce;">&quot;)
+<pre data-lang="python" class="language-python "><code class="language-python" data-lang="python">def get_s3_bucket():
+    if airflow_environment == &quot;production&quot;:
+        return &quot;my-prod-bucket&quot;
+    elif airflow_environemnt == &quot;staging&quot;:
+        return &quot;my-staging-bucket&quot;
+    else:
+        # make sure we don&#x27;t screw this up
+        raise ValueError(&quot;Unknown Airflow Environment&quot;)
 
-</span><span style="color:#65737e;">### somewhere later
+### somewhere later
 
-</span><span style="color:#c0c5ce;">sensor = </span><span style="color:#bf616a;">S3KeySensor</span><span style="color:#c0c5ce;">(
-    </span><span style="color:#bf616a;">bucket_name</span><span style="color:#c0c5ce;">=</span><span style="color:#bf616a;">get_s3_bucket</span><span style="color:#c0c5ce;">(),
-    </span><span style="color:#bf616a;">bucket_key</span><span style="color:#c0c5ce;">=&quot;</span><span style="color:#a3be8c;">key_i_look_for</span><span style="color:#c0c5ce;">&quot;
+sensor = S3KeySensor(
+    bucket_name=get_s3_bucket(),
+    bucket_key=&quot;key_i_look_for&quot;
 )
-</span></code></pre>
+</code></pre>
 <p>Using this pattern quickly leads to sprawl and makes refactoring (or adding envs) a pain. A better pattern is to wrap anything environment dependent into a central class that can be used anywhere. For example:</p>
-<pre style="background-color:#2b303b;">
-<code class="language-python" data-lang="python"><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">os
-</span><span style="color:#b48ead;">from </span><span style="color:#c0c5ce;">typing </span><span style="color:#b48ead;">import </span><span style="color:#d08770;">*
+<pre data-lang="python" class="language-python "><code class="language-python" data-lang="python">import os
+from typing import *
 
-</span><span style="color:#b48ead;">class </span><span style="color:#ebcb8b;">DAGEnvironment</span><span style="color:#eff1f5;">:
-    </span><span style="color:#65737e;">&quot;&quot;&quot;
+class DAGEnvironment:
+    &quot;&quot;&quot;
     A class to manage any resource that depends on the environment the dag runs in
     &quot;&quot;&quot;
 
-    </span><span style="color:#bf616a;">ALLOWED_ENVIRONMENTS </span><span style="color:#c0c5ce;">= [&quot;</span><span style="color:#a3be8c;">Staging</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">Production</span><span style="color:#c0c5ce;">&quot;]
+    ALLOWED_ENVIRONMENTS = [&quot;Staging&quot;, &quot;Production&quot;]
 
-    </span><span style="color:#b48ead;">def </span><span style="color:#96b5b4;">__init__</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">airlfow_environment</span><span style="color:#c0c5ce;">: Optional[str] = </span><span style="color:#d08770;">None</span><span style="color:#c0c5ce;">):
-        </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">airflow_environment is </span><span style="color:#d08770;">None</span><span style="color:#c0c5ce;">:
-            airflow_environment = os.eviron.</span><span style="color:#bf616a;">get</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">AIRFLOW_ENVIRONMENT</span><span style="color:#c0c5ce;">&quot;)
-            </span><span style="color:#65737e;"># or alternatively if you&#39;ve exported the env as `AIRFLOW_VAR_AIRFLOW_ENVIRONMENT`
+    def __init__(self, airlfow_environment: Optional[str] = None):
+        if airflow_environment is None:
+            airflow_environment = os.eviron.get(&quot;AIRFLOW_ENVIRONMENT&quot;)
+            # or alternatively if you&#x27;ve exported the env as `AIRFLOW_VAR_AIRFLOW_ENVIRONMENT`
             # airflow_environemnt = Variable.get(&quot;airflow_environment&quot;)
 
-        </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">not airflow_environment:
-            </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">ValueError</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">Unable to detect environment</span><span style="color:#c0c5ce;">&quot;)
-        </span><span style="color:#b48ead;">elif </span><span style="color:#c0c5ce;">airflow_environment not in </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.</span><span style="color:#bf616a;">ALLOWED_ENVS</span><span style="color:#c0c5ce;">:
-            </span><span style="color:#b48ead;">raise </span><span style="color:#bf616a;">ValueError</span><span style="color:#c0c5ce;">(</span><span style="color:#b48ead;">f</span><span style="color:#c0c5ce;">&quot;</span><span style="color:#a3be8c;">Unknown env </span><span style="color:#c0c5ce;">{airflow_environment}</span><span style="color:#a3be8c;">. Abort for safety.</span><span style="color:#c0c5ce;">&quot;)
+        if not airflow_environment:
+            raise ValueError(&quot;Unable to detect environment&quot;)
+        elif airflow_environment not in self.ALLOWED_ENVS:
+            raise ValueError(f&quot;Unknown env {airflow_environment}. Abort for safety.&quot;)
 
-        </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.airflow_environment = airflow_environment
+        self.airflow_environment = airflow_environment
 
-    @</span><span style="color:#96b5b4;">property
-    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">production</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">) -&gt; bool:
-        </span><span style="color:#65737e;">&quot;&quot;&quot;Helper property&quot;&quot;&quot;
-        </span><span style="color:#b48ead;">return </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.airflow_environment == &quot;</span><span style="color:#a3be8c;">Production</span><span style="color:#c0c5ce;">&quot;
+    @property
+    def production(self) -&gt; bool:
+        &quot;&quot;&quot;Helper property&quot;&quot;&quot;
+        return self.airflow_environment == &quot;Production&quot;
 
-    @</span><span style="color:#96b5b4;">property
-    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">staging</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">) -&gt; bool:
-        </span><span style="color:#65737e;">&quot;&quot;&quot;Helper property&quot;&quot;&quot;
-        </span><span style="color:#b48ead;">return </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.airflow_environment == &quot;</span><span style="color:#a3be8c;">Staging</span><span style="color:#c0c5ce;">&quot;
+    @property
+    def staging(self) -&gt; bool:
+        &quot;&quot;&quot;Helper property&quot;&quot;&quot;
+        return self.airflow_environment == &quot;Staging&quot;
 
-    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">_get_environment_bucket</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">staging_bucket</span><span style="color:#c0c5ce;">: str, </span><span style="color:#bf616a;">production_bucket</span><span style="color:#c0c5ce;">: str) -&gt; str:
-        </span><span style="color:#65737e;">&quot;&quot;&quot;
+    def _get_environment_bucket(self, staging_bucket: str, production_bucket: str) -&gt; str:
+        &quot;&quot;&quot;
         Helper covering most use cases
         &quot;&quot;&quot;
-        </span><span style="color:#b48ead;">return </span><span style="color:#c0c5ce;">staging_bucket </span><span style="color:#b48ead;">if </span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">.staging </span><span style="color:#b48ead;">else </span><span style="color:#c0c5ce;">production_bucket
+        return staging_bucket if self.staging else production_bucket
 
-    </span><span style="color:#65737e;"># Now we can define all the environment specific variables
-    </span><span style="color:#c0c5ce;">@</span><span style="color:#96b5b4;">property
-    </span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">my_bucket</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">self</span><span style="color:#c0c5ce;">) -&gt; str:
-        </span><span style="color:#b48ead;">return </span><span style="color:#bf616a;">_get_environment_bucket</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">my-staging-bucket</span><span style="color:#c0c5ce;">&quot;, &quot;</span><span style="color:#a3be8c;">my-production-bucket</span><span style="color:#c0c5ce;">&quot;)
+    # Now we can define all the environment specific variables
+    @property
+    def my_bucket(self) -&gt; str:
+        return _get_environment_bucket(&quot;my-staging-bucket&quot;, &quot;my-production-bucket&quot;)
 
-    </span><span style="color:#65737e;"># etc
-</span></code></pre>
+    # etc
+</code></pre>
 <p>Putting all the environment switching logic in a class (and in one place in the class) helps encapsualte the logic and leads to cleaner, more understandable, less brittle code.</p>
 <p>We can now use it:</p>
-<pre style="background-color:#2b303b;">
-<code class="language-python" data-lang="python"><span style="color:#b48ead;">from .</span><span style="color:#c0c5ce;">dag_environment </span><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">DAGEnvironment
+<pre data-lang="python" class="language-python "><code class="language-python" data-lang="python">from .dag_environment import DAGEnvironment
 
-env = </span><span style="color:#bf616a;">DAGEnvironment</span><span style="color:#c0c5ce;">()
+env = DAGEnvironment()
 
-</span><span style="color:#b48ead;">with </span><span style="color:#bf616a;">Dag</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">my_dag</span><span style="color:#c0c5ce;">&quot;) </span><span style="color:#b48ead;">as </span><span style="color:#c0c5ce;">dag:
-    sensor = </span><span style="color:#bf616a;">S3KeySensor</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">bucket_name</span><span style="color:#c0c5ce;">=env.my_bucket, </span><span style="color:#bf616a;">bucket_key</span><span style="color:#c0c5ce;">=&quot;</span><span style="color:#a3be8c;">key_i_look_for</span><span style="color:#c0c5ce;">&quot;)
-</span><span style="color:#65737e;"># etc
-</span></code></pre></section>
+with Dag(&quot;my_dag&quot;) as dag:
+    sensor = S3KeySensor(bucket_name=env.my_bucket, bucket_key=&quot;key_i_look_for&quot;)
+# etc
+</code></pre>
+</section>
 </article>
 </div>
 

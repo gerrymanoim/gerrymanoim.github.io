@@ -15,7 +15,7 @@
         <a href="/" id="home-link">home</a>
     </div>
     <div id="top-menu">
-        <a href="https:&#x2F;&#x2F;gerrymanoim.github.io&#x2F;about&#x2F;">about</a>
+        <a href="https://gerrymanoim.github.io/about/">about</a>
         <a href="http://github.com/gerrymanoim/">github</a>
     </div>
     <div style="clear:both"></div>
@@ -40,52 +40,50 @@
 <p>First create set up AWS transfer and create login credentials for your external FTP sites. You can use the same s3 bucket for all of them and point each to different sub directories.</p>
 <p>Then you want to create a lambda function an add <code>ObjectCreated</code> triggers for any source bucket (buckets your production airflow instances are copying files to).</p>
 <p>Then we need a structure to hold our rules:</p>
-<pre style="background-color:#2b303b;">
-<code class="language-python" data-lang="python"><span style="color:#65737e;"># An `S3Router` will be:
+<pre data-lang="python" class="language-python "><code class="language-python" data-lang="python"># An `S3Router` will be:
 # Dict[str, Tuple[str, Union[None, callable]]
 # S3Router = {
-#    &#39;src_key_pattern&#39;: (&#39;dest_bucket&#39;, &#39;dest_key&#39;)
+#    &#x27;src_key_pattern&#x27;: (&#x27;dest_bucket&#x27;, &#x27;dest_key&#x27;)
 # }
 # where `dest_key` is a None, at which point we reuses the src_key, or
 # a callable
 # an example for our purposes:
-</span><span style="color:#c0c5ce;">S3Router = {
-    &quot;</span><span style="color:#a3be8c;">.*a_very_important_file.\d</span><span style="color:#d08770;">{8}</span><span style="color:#a3be8c;">.csv</span><span style="color:#c0c5ce;">&quot; : (
-        &quot;</span><span style="color:#a3be8c;">my-staging-s3-bucket</span><span style="color:#c0c5ce;">&quot;,
-        </span><span style="color:#d08770;">None
-    </span><span style="color:#c0c5ce;">),
-    &quot;</span><span style="color:#a3be8c;">.*a_different_file.latest.csv</span><span style="color:#c0c5ce;">&quot;: (
-        &quot;</span><span style="color:#a3be8c;">my-aws-transfer-buckket</span><span style="color:#c0c5ce;">&quot;,
-        </span><span style="color:#b48ead;">lambda </span><span style="color:#bf616a;">x</span><span style="color:#c0c5ce;">: &quot;</span><span style="color:#a3be8c;">ftp_dir/outgoing</span><span style="color:#c0c5ce;">&quot;+</span><span style="color:#bf616a;">Path</span><span style="color:#c0c5ce;">(x).name
+S3Router = {
+    &quot;.*a_very_important_file.\d{8}.csv&quot; : (
+        &quot;my-staging-s3-bucket&quot;,
+        None
+    ),
+    &quot;.*a_different_file.latest.csv&quot;: (
+        &quot;my-aws-transfer-buckket&quot;,
+        lambda x: &quot;ftp_dir&#x2F;outgoing&quot;+Path(x).name
     ),
 }
-</span></code></pre>
+</code></pre>
 <p>Here - we'd like to grab the  <code>a_very_important_file</code> and move them to our staging s3 bucket without making any modifications to the s3 key. We'd also like to grab <code>a_different_file</code> and move it to our AWS Transfer bucket under the path we would have picked it up from.</p>
 <p>Then we create the actual funciton that does the work:</p>
-<pre style="background-color:#2b303b;">
-<code class="language-python" data-lang="python"><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">boto3
-</span><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">re
-</span><span style="color:#b48ead;">from </span><span style="color:#c0c5ce;">pathlib </span><span style="color:#b48ead;">import </span><span style="color:#c0c5ce;">Path
+<pre data-lang="python" class="language-python "><code class="language-python" data-lang="python">import boto3
+import re
+from pathlib import Path
 
 
-</span><span style="color:#b48ead;">def </span><span style="color:#8fa1b3;">lambda_handler</span><span style="color:#c0c5ce;">(</span><span style="color:#bf616a;">event</span><span style="color:#c0c5ce;">, </span><span style="color:#bf616a;">context</span><span style="color:#c0c5ce;">):
-    src_key = event[&quot;</span><span style="color:#a3be8c;">Records</span><span style="color:#c0c5ce;">&quot;][</span><span style="color:#d08770;">0</span><span style="color:#c0c5ce;">][&quot;</span><span style="color:#a3be8c;">s3</span><span style="color:#c0c5ce;">&quot;][&quot;</span><span style="color:#a3be8c;">object</span><span style="color:#c0c5ce;">&quot;][&quot;</span><span style="color:#a3be8c;">key</span><span style="color:#c0c5ce;">&quot;]
-    src_bucket = event[&quot;</span><span style="color:#a3be8c;">Records</span><span style="color:#c0c5ce;">&quot;][</span><span style="color:#d08770;">0</span><span style="color:#c0c5ce;">][&quot;</span><span style="color:#a3be8c;">s3</span><span style="color:#c0c5ce;">&quot;][&quot;</span><span style="color:#a3be8c;">bucket</span><span style="color:#c0c5ce;">&quot;][&quot;</span><span style="color:#a3be8c;">name</span><span style="color:#c0c5ce;">&quot;]
-    </span><span style="color:#b48ead;">for </span><span style="color:#c0c5ce;">pattern, route </span><span style="color:#b48ead;">in </span><span style="color:#c0c5ce;">S3Router.</span><span style="color:#bf616a;">items</span><span style="color:#c0c5ce;">():
-        </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">re.</span><span style="color:#bf616a;">compile</span><span style="color:#c0c5ce;">(pattern).</span><span style="color:#bf616a;">match</span><span style="color:#c0c5ce;">(src_key):
-            dest_bucket = route[</span><span style="color:#d08770;">0</span><span style="color:#c0c5ce;">]
-            dest_key = src_key </span><span style="color:#b48ead;">if </span><span style="color:#c0c5ce;">not route[</span><span style="color:#d08770;">1</span><span style="color:#c0c5ce;">] </span><span style="color:#b48ead;">else </span><span style="color:#c0c5ce;">route[</span><span style="color:#d08770;">1</span><span style="color:#c0c5ce;">](src_key)
+def lambda_handler(event, context):
+    src_key = event[&quot;Records&quot;][0][&quot;s3&quot;][&quot;object&quot;][&quot;key&quot;]
+    src_bucket = event[&quot;Records&quot;][0][&quot;s3&quot;][&quot;bucket&quot;][&quot;name&quot;]
+    for pattern, route in S3Router.items():
+        if re.compile(pattern).match(src_key):
+            dest_bucket = route[0]
+            dest_key = src_key if not route[1] else route[1](src_key)
 
-            </span><span style="color:#96b5b4;">print</span><span style="color:#c0c5ce;">(
-                &quot;</span><span style="color:#a3be8c;">Copying </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;">/</span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;"> to </span><span style="color:#d08770;">{}</span><span style="color:#a3be8c;">/</span><span style="color:#d08770;">{}</span><span style="color:#c0c5ce;">&quot;.</span><span style="color:#bf616a;">format</span><span style="color:#c0c5ce;">(
+            print(
+                &quot;Copying {}&#x2F;{} to {}&#x2F;{}&quot;.format(
                     src_bucket, src_key, dest_bucket, dest_key
                 )
             )
-            s3 = boto3.</span><span style="color:#bf616a;">resource</span><span style="color:#c0c5ce;">(&quot;</span><span style="color:#a3be8c;">s3</span><span style="color:#c0c5ce;">&quot;)
-            copy_source = {&quot;</span><span style="color:#a3be8c;">Bucket</span><span style="color:#c0c5ce;">&quot;: src_bucket, &quot;</span><span style="color:#a3be8c;">Key</span><span style="color:#c0c5ce;">&quot;: src_key}
-            s3.meta.client.</span><span style="color:#bf616a;">copy</span><span style="color:#c0c5ce;">(copy_source, dest_bucket, dest_key)
+            s3 = boto3.resource(&quot;s3&quot;)
+            copy_source = {&quot;Bucket&quot;: src_bucket, &quot;Key&quot;: src_key}
+            s3.meta.client.copy(copy_source, dest_bucket, dest_key)
 
-</span></code></pre>
+</code></pre>
 <p>For any incoming s3 even, this function tries every match in your <code>S3Router</code>. If it finds a match, it either resuses the key or uses the function you passed to create the new key. Finally it copies the file to the new desination.</p>
 <p>This flow will run in the background without any intervention, though I'd recommend you set up a Cloudwatch log alarm on this function failing.</p>
 <p>Now your staging and prod FTP nodes can use the same code, but just have different login information provided.</p>
